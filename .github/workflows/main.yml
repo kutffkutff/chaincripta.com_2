@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: ci-chain
@@ -24,9 +25,6 @@ jobs:
 
     steps:
 
-      # -----------------------------
-      # Enable RDP
-      # -----------------------------
       - name: Enable TS
         run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
 
@@ -36,25 +34,16 @@ jobs:
 
       - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
 
-      # -----------------------------
-      # Prepare folders
-      # -----------------------------
       - name: Prepare folders
         run: |
           New-Item -ItemType Directory -Path C:\9Hits -Force
 
-      # -----------------------------
-      # Download ZIP to workspace (for hash)
-      # -----------------------------
       - name: Download latest package
         run: |
           Invoke-WebRequest `
             "http://chaincripta.com/hits_chaincripta.com_2.zip" `
             -OutFile "$env:GITHUB_WORKSPACE\hits.zip"
 
-      # -----------------------------
-      # Restore cache
-      # -----------------------------
       - name: Restore cache
         uses: actions/cache@v4
         with:
@@ -65,25 +54,16 @@ jobs:
           restore-keys: |
             9hits-
 
-      # -----------------------------
-      # Copy ZIP to runtime folder
-      # -----------------------------
       - name: Place ZIP
         run: |
           Copy-Item "$env:GITHUB_WORKSPACE\hits.zip" "C:\9Hits\hits.zip" -Force
 
-      # -----------------------------
-      # Download cloudflared if needed
-      # -----------------------------
       - name: Download cloudflared
         run: |
           if (!(Test-Path "cloudflared.exe")) {
             Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
           }
 
-      # -----------------------------
-      # Setup 9Hits
-      # -----------------------------
       - name: Setup 9Hits
         run: |
           $exe = Get-ChildItem C:\9Hits -Recurse -Filter "9hits.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -92,9 +72,6 @@ jobs:
             Expand-Archive "C:\9Hits\hits.zip" C:\9Hits -Force
           }
 
-      # -----------------------------
-      # Restore app state
-      # -----------------------------
       - name: Restore 9Hits state
         run: |
 
@@ -120,9 +97,6 @@ jobs:
 
           Remove-Item $tmp -Recurse -Force
 
-      # -----------------------------
-      # Run 9Hits
-      # -----------------------------
       - name: Run 9Hits
         run: |
 
@@ -140,9 +114,6 @@ jobs:
             schtasks /delete /tn $task /f
           }
 
-      # -----------------------------
-      # Cloudflare tunnel watchdog
-      # -----------------------------
       - name: Start Cloudflare tunnel
         run: |
 
@@ -166,44 +137,28 @@ jobs:
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
 
-      # -----------------------------
-      # Wait 2 minutes
-      # -----------------------------
-      - name: Wait
+      - name: Wait 2 minutes
         run: Start-Sleep 120
 
-      # -----------------------------
-      # Self restart (guaranteed)
-      # -----------------------------
       - name: Restart workflow
         if: always() && matrix.runner == 1
         run: |
 
-          try {
+          Start-Sleep 20
 
-            Invoke-RestMethod `
-              -Method POST `
-              -Uri "https://api.github.com/repos/${{ github.repository }}/dispatches" `
-              -Headers @{
-                Authorization = "Bearer $env:GITHUB_TOKEN"
-                Accept="application/vnd.github+json"
-                "User-Agent"="GitHubActions"
-              } `
-              -Body '{"event_type":"restart"}'
-
-            Write-Host "Workflow restarted"
-
-          } catch {
-
-            Write-Host "Restart failed"
-          }
+          Invoke-RestMethod `
+            -Method POST `
+            -Uri "https://api.github.com/repos/${{ github.repository }}/dispatches" `
+            -Headers @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept="application/vnd.github+json"
+              "User-Agent"="GitHubActions"
+            } `
+            -Body '{"event_type":"restart"}'
 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # -----------------------------
-      # Resource stats
-      # -----------------------------
       - name: Resource usage summary
         if: always()
         run: |
